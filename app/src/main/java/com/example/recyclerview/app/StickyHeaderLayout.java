@@ -41,12 +41,13 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
             return;
         }
 
-        if (state.getItemCount() <=  mFirstVisiblePosition) {
-            mFirstVisiblePosition = 0;
-            mFirstVisibleOffset = 0;
+        if (state.getItemCount() < mTopLayoutPosition) {
+            mTopLayoutPosition = 0;
+            mTopLayoutOffset = 0;
         }
-        int pos = mFirstVisiblePosition;
-        int watermark = mFirstVisibleOffset;
+
+        int pos = mTopLayoutPosition;
+        int watermark = mTopLayoutOffset;
         while (watermark < getHeight() && pos < state.getItemCount()) {
             View view = recycler.getViewForPosition(pos);
             addView(view);
@@ -68,15 +69,15 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
 
         if (watermark < getHeight()) {
             int empty = getHeight() - watermark;
-            if (empty + mFirstVisibleOffset < 0) {
+            if (empty + mTopLayoutOffset < 0) {
                 offsetChildrenVertical(-empty);
-                mFirstVisibleOffset += empty;
+                mTopLayoutOffset += empty;
             } else {
-                int offset = -mFirstVisibleOffset;
-                mFirstVisibleOffset = 0;
-                while (empty > offset && mFirstVisiblePosition > 0) {
-                    mFirstVisiblePosition--;
-                    View view = recycler.getViewForPosition(mFirstVisiblePosition);
+                int offset = -mTopLayoutOffset;
+                mTopLayoutOffset = 0;
+                while (empty > offset && mTopLayoutPosition > 0) {
+                    mTopLayoutPosition--;
+                    View view = recycler.getViewForPosition(mTopLayoutPosition);
                     addView(view, 0);
                     measureChildWithMargins(view, 0, 0);
 
@@ -92,7 +93,7 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
 
                     offset += height;
                     if (empty < offset) {
-                        mFirstVisibleOffset = empty - offset;
+                        mTopLayoutOffset = empty - offset;
                     }
                 }
                 if (offset != 0) {
@@ -103,6 +104,34 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
 
         recycleInvisible(recycler);
         adjustHeaderPosition(recycler);
+
+        if (mLayoutAfterHeader && mHeaderPosition != null) {
+            int headerPos = mHeaderPosition.getHeaderPosition(mTopLayoutPosition);
+            if (headerPos < mTopLayoutPosition) {
+                View headerView = null;
+                for (int i = 0; i < getChildCount(); i++) {
+                    View v = getChildAt(i);
+                    if (getPosition(v) == headerPos) {
+                        headerView = v;
+                        break;
+                    }
+                }
+                if (headerView == null) {
+                    headerView = recycler.getViewForPosition(headerPos);
+                    measureChildWithMargins(headerView, 0, 0);
+                    RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) headerView.getLayoutParams();
+                    int height = getDecoratedMeasuredHeight(headerView) + params.topMargin + params.bottomMargin;
+                    recycler.recycleView(headerView);
+                    scrollVerticallyBy(-height, recycler, state);
+                } else {
+                    RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) headerView.getLayoutParams();
+                    int height = getDecoratedMeasuredHeight(headerView) + params.topMargin + params.bottomMargin;
+
+                    scrollVerticallyBy(-height, recycler, state);
+                }
+            }
+        }
+        mLayoutAfterHeader = false;
     }
 
     @Override
@@ -117,21 +146,12 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
         }
 
         if (dy < 0) {
-            if (mFirstVisiblePosition == 0) {
-                View view = getChildAt(getChildCount() - 1);
-                if (getPosition(view) != 0) {
-                    view = getChildAt(0);
-                }
-                if (getPosition(view) == 0) {
-                    RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) view.getLayoutParams();
-                    if (view.getTop() - params.topMargin >= 0) {
-                        return 0;
-                    }
-                }
+            if (mTopLayoutPosition == 0 && mTopLayoutOffset == 0) {
+                return 0;
             }
         }
         else if (dy > 0) {
-            if (mFirstVisiblePosition + getChildCount() >= state.getItemCount()) {
+            if (mTopLayoutPosition + getChildCount() >= state.getItemCount()) {
                 View view = getChildAt(getChildCount() - 1);
                 if (getPosition(view) == mDetachedHeaderPos) {
                     if (getChildCount() >= 2) {
@@ -149,7 +169,7 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
         }
 
         if (mDetachedHeaderPos >= 0) {
-            if (mDetachedHeaderPos < mFirstVisiblePosition) {
+            if (mDetachedHeaderPos < mTopLayoutPosition) {
                 detachAndScrapViewAt(getChildCount() - 1, recycler);
             } else {
                 View header = getChildAt(getChildCount() - 1);
@@ -158,7 +178,7 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
                 RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) header.getLayoutParams();
                 int height = getDecoratedMeasuredHeight(header) + params.topMargin + params.bottomMargin;
                 int l = getPaddingLeft();
-                int t = mFirstVisibleOffset;
+                int t = mTopLayoutOffset;
                 int r = l + getDecoratedMeasuredWidth(header);
                 int b = t + height;
 
@@ -176,9 +196,9 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
             View view = getChildAt(0);
             RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) view.getLayoutParams();
             int top = view.getTop() - params.topMargin;
-            while (top > 0 && mFirstVisiblePosition > 0) {
-                mFirstVisiblePosition--;
-                view = recycler.getViewForPosition(mFirstVisiblePosition);
+            while (top > 0 && mTopLayoutPosition > 0) {
+                mTopLayoutPosition--;
+                view = recycler.getViewForPosition(mTopLayoutPosition);
                 addView(view, 0);
                 measureChildWithMargins(view, 0, 0);
                 int height = getDecoratedMeasuredHeight(view) + params.topMargin + params.bottomMargin;
@@ -200,7 +220,7 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
             }
         }
         else if (offsetRequested < 0) { // scroll up
-            int lastPos = mFirstVisiblePosition + getChildCount() - 1;
+            int lastPos = mTopLayoutPosition + getChildCount() - 1;
             View view = getChildAt(getChildCount() - 1);
             RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) view.getLayoutParams();
             int bottom = view.getTop() + getDecoratedMeasuredHeight(view) + params.bottomMargin;
@@ -247,11 +267,11 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
             RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) view.getLayoutParams();
             int height = getDecoratedMeasuredHeight(view) + params.topMargin + params.bottomMargin;
             if ((view.getTop() - params.topMargin + height) < 0) {
-                mFirstVisiblePosition++;
+                mTopLayoutPosition++;
                 removeView(view);
                 recycler.recycleView(view);
             } else {
-                mFirstVisibleOffset = view.getTop() - params.topMargin;
+                mTopLayoutOffset = view.getTop() - params.topMargin;
                 break;
             }
         }
@@ -272,9 +292,9 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
             return;
         }
 
-        mDetachedHeaderPos = mHeaderPosition.getHeaderPosition(mFirstVisiblePosition);
+        mDetachedHeaderPos = mHeaderPosition.getHeaderPosition(mTopLayoutPosition);
         View header = null;
-        if (mDetachedHeaderPos == mFirstVisiblePosition) {
+        if (mDetachedHeaderPos == mTopLayoutPosition) {
             header = getChildAt(0);
             detachViewAt(0);
             attachView(header);
@@ -311,14 +331,14 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
 
     @Override
     public void scrollToPosition(int position) {
-        mFirstVisiblePosition = position;
-        mFirstVisibleOffset = 0;
+        mTopLayoutPosition = position;
+        mTopLayoutOffset = 0;
+        mLayoutAfterHeader = true;
         requestLayout();
     }
-
+/*
     @Override
-    public void smoothScrollToPosition(RecyclerView recyclerView, RecyclerView.State state,
-                                       int position) {
+    public void smoothScrollToPosition(RecyclerView recyclerView, RecyclerView.State state, int position) {
         LinearSmoothScroller linearSmoothScroller =
                 new LinearSmoothScroller(recyclerView.getContext()) {
                     @Override
@@ -334,18 +354,19 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
         if (getChildCount() == 0) {
             return null;
         }
-        return new PointF(0, targetPosition > mFirstVisiblePosition ? 1 : -1);
+        return new PointF(0, targetPosition > mTopLayoutPosition ? 1 : -1);
     }
-
-    int mFirstVisiblePosition = 0;
-    int mFirstVisibleOffset = 0;
+*/
+    int mTopLayoutPosition = 0;
+    int mTopLayoutOffset = 0;
+    boolean mLayoutAfterHeader;
     int mDetachedHeaderPos = -1;
 
     @Override
     public Parcelable onSaveInstanceState() {
         SavedState state = new SavedState();
-        state.mFirstVisiblePosition = mFirstVisiblePosition;
-        state.mFirstVisibleOffset = mFirstVisibleOffset;
+        state.mFirstVisiblePosition = mTopLayoutPosition;
+        state.mFirstVisibleOffset = mTopLayoutOffset;
         return state;
     }
 
@@ -353,8 +374,8 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
     public void onRestoreInstanceState(Parcelable state) {
         if (state instanceof SavedState) {
             SavedState ss = (SavedState) state;
-            mFirstVisiblePosition = ss.mFirstVisiblePosition;
-            mFirstVisibleOffset = ss.mFirstVisibleOffset;
+            mTopLayoutPosition = ss.mFirstVisiblePosition;
+            mTopLayoutOffset = ss.mFirstVisibleOffset;
         }
     }
 
