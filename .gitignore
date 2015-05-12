@@ -1,0 +1,11 @@
+workspace.xml
+tasks.xml
+local.properties
+bin/
+gen/
+out/
+tmp/
+.DS_Store
+.idea/dictionaries/*
+.gradle/
+build/
