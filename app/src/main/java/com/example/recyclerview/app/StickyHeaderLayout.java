@@ -1,9 +1,7 @@
-package com.example.recyclerview.app;
+package com.intuit.qbharmony.widgets;
 
-import android.graphics.PointF;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.v7.widget.LinearSmoothScroller;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,16 +26,14 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
 
     @Override
     public void onAdapterChanged(RecyclerView.Adapter oldAdapter, RecyclerView.Adapter newAdapter) {
-        if (IHeaderPosition.class.isAssignableFrom(newAdapter.getClass())) {
-            mHeaderPosition = (IHeaderPosition) newAdapter;
-        }
         removeAllViews();
     }
 
     @Override
     public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
         detachAndScrapAttachedViews(recycler);
-        if (getItemCount() == 0) {
+
+        if (state.getItemCount() == 0) {
             return;
         }
 
@@ -107,7 +103,7 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
 
         if (mLayoutAfterHeader && mHeaderPosition != null) {
             int headerPos = mHeaderPosition.getHeaderPosition(mTopLayoutPosition);
-            if (headerPos < mTopLayoutPosition) {
+            if (headerPos >= 0 && headerPos < mTopLayoutPosition) {
                 View headerView = null;
                 for (int i = 0; i < getChildCount(); i++) {
                     View v = getChildAt(i);
@@ -132,6 +128,37 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
             }
         }
         mLayoutAfterHeader = false;
+    }
+
+    @Override
+    public int computeVerticalScrollRange(RecyclerView.State state) {
+        return state.getItemCount() * 2;
+    }
+
+    @Override
+    public int computeVerticalScrollExtent(RecyclerView.State state) {
+        return Math.min(getChildCount(), state.getItemCount()) * 2;
+    }
+
+    @Override
+    public int computeVerticalScrollOffset(RecyclerView.State state) {
+        if (state.getItemCount() == 0) {
+            return 0;
+        }
+
+        if (mTopLayoutPosition == 0 && mTopLayoutOffset == 0) {
+            return 0;
+        } else {
+            int offset = mTopLayoutPosition + getChildCount();
+            if (offset > state.getItemCount()) {
+                offset = state.getItemCount();
+            }
+            offset -= computeVerticalScrollExtent(state);
+            if (offset < 1) {
+                offset = 1;
+            }
+            return offset;
+        }
     }
 
     @Override
@@ -261,6 +288,20 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
         return -offsetPerformed;
     }
 
+    public int findLastVisibleItemPosition() {
+        if (getChildCount() > 0) {
+            View view = getChildAt(getChildCount() - 1);
+            int pos = getPosition(view);
+            if (pos == mDetachedHeaderPos) {
+                if (getChildCount() > 1) {
+                    view = getChildAt(getChildCount() - 2);
+                    return getPosition(view);
+                }
+            }
+        }
+        return -1;
+    }
+
     private void recycleInvisible(RecyclerView.Recycler recycler) {
         while (getChildCount() > 0) {
             View view = getChildAt(0);
@@ -293,7 +334,10 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
         }
 
         mDetachedHeaderPos = mHeaderPosition.getHeaderPosition(mTopLayoutPosition);
-        View header = null;
+        if (mDetachedHeaderPos < 0) {
+            return;
+        }
+        View header;
         if (mDetachedHeaderPos == mTopLayoutPosition) {
             header = getChildAt(0);
             detachViewAt(0);
@@ -336,27 +380,7 @@ public class StickyHeaderLayout extends RecyclerView.LayoutManager {
         mLayoutAfterHeader = true;
         requestLayout();
     }
-/*
-    @Override
-    public void smoothScrollToPosition(RecyclerView recyclerView, RecyclerView.State state, int position) {
-        LinearSmoothScroller linearSmoothScroller =
-                new LinearSmoothScroller(recyclerView.getContext()) {
-                    @Override
-                    public PointF computeScrollVectorForPosition(int targetPosition) {
-                        return StickyHeaderLayout.this.computeScrollVectorForPosition(targetPosition);
-                    }
-                };
-        linearSmoothScroller.setTargetPosition(position);
-        startSmoothScroll(linearSmoothScroller);
-    }
 
-    public PointF computeScrollVectorForPosition(int targetPosition) {
-        if (getChildCount() == 0) {
-            return null;
-        }
-        return new PointF(0, targetPosition > mTopLayoutPosition ? 1 : -1);
-    }
-*/
     int mTopLayoutPosition = 0;
     int mTopLayoutOffset = 0;
     boolean mLayoutAfterHeader;
